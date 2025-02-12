@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
-import { OrderStatus, PrismaClient } from '@prisma/client';
+import { Order, OrderStatus, PrismaClient } from '@prisma/client';
 import {  ClientProxy, RpcException } from '@nestjs/microservices';
 import OrderPaginationDto from './dto/order-pagination.dto';
 import { PRODUCTS_SERVICE } from 'src/config';
@@ -65,18 +65,12 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
               price: true,
               quantity: true,
               productId: true,
-
             }
           }
         }
       })
 
-      return {...order, OrderItem: order.OrderItem.map(item => ({
-        price: item.price,
-        quantity: item.quantity,
-        productId: item.productId,
-        name: products.find(product => product.id === item.productId)?.name
-      }))};
+      return this.constructOrderResponse(order, products);
     } catch (error) {
       throw new RpcException({ message: `Error creating order`, status: HttpStatus.BAD_REQUEST });
     }
@@ -115,17 +109,34 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
   }
 
   async findOne(id: string) {
-    const order = await this.order.findUnique({
+    const order= await this.order.findUnique({
       where: {
         id: id
+      },
+      include: {
+        OrderItem: {
+          select: {
+            price: true,
+            quantity: true,
+            productId: true,
+          }
+        }
       }
     });
+
     
     if (!order) {
       throw new RpcException({ message: `Order with id ${id} not found`, status: HttpStatus.NOT_FOUND });
     }
+    try {
+      const orderItemsIds = order.OrderItem.map(item => item.productId);
+      const products: any[] = await firstValueFrom(this.productsClient.send({cmd: 'validate_product'}, orderItemsIds));
+
+      return this.constructOrderResponse(order, products);
+    } catch (error) {
+      throw new RpcException({ message: `Error fetching order`, status: HttpStatus.BAD_REQUEST });
+    }
     
-    return order;
   }
 
   async changeOrderStatus(id: string, status: OrderStatus) {
@@ -143,5 +154,19 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
         status: status
       }
     });
+  }
+
+  async constructOrderResponse(order: any, products: any[]) {
+    // implementar interfaces para estas cosas tanto products como order para tener tipado decente en esta funcion
+    // const products: any[] = await firstValueFrom(this.productsClient.send({cmd: 'validate_product'}, orderIds));
+
+    return {
+      ...order, 
+      OrderItem: order.OrderItem.map(item => ({
+      price: item.price,
+      quantity: item.quantity,
+      productId: item.productId,
+      name: products.find(product => product.id === item.productId)?.name
+    }))}
   }
 }

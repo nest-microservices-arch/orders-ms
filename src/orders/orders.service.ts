@@ -4,7 +4,7 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 import { Order, OrderStatus, PrismaClient } from '@prisma/client';
 import {  ClientProxy, RpcException } from '@nestjs/microservices';
 import OrderPaginationDto from './dto/order-pagination.dto';
-import { PRODUCTS_SERVICE } from 'src/config';
+import { NATS_SERVICE } from 'src/config';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
@@ -16,7 +16,7 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
 
 
   constructor(
-    @Inject(PRODUCTS_SERVICE) private readonly productsClient: ClientProxy,
+    @Inject(NATS_SERVICE) private readonly client: ClientProxy,
   ) {
     super();
   }
@@ -33,7 +33,7 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
   async create(createOrderDto: CreateOrderDto) {    
     try {
       const ids = createOrderDto.items.map(item => item.productId);
-      const products: any[] = await firstValueFrom(this.productsClient.send({cmd: 'validate_product'}, ids));
+      const products: any[] = await firstValueFrom(this.client.send('validate_product', ids));
 
       const totalAmount = createOrderDto.items.reduce((acc, orderItem)=> {
         const price = products.find(product => product.id === orderItem.productId)?.price;
@@ -130,7 +130,7 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
     }
     try {
       const orderItemsIds = order.OrderItem.map(item => item.productId);
-      const products: any[] = await firstValueFrom(this.productsClient.send({cmd: 'validate_product'}, orderItemsIds));
+      const products: any[] = await firstValueFrom(this.client.send('validate_product', orderItemsIds));
 
       return this.constructOrderResponse(order, products);
     } catch (error) {
@@ -158,7 +158,7 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
 
   async constructOrderResponse(order: any, products: any[]) {
     // implementar interfaces para estas cosas tanto products como order para tener tipado decente en esta funcion
-    // const products: any[] = await firstValueFrom(this.productsClient.send({cmd: 'validate_product'}, orderIds));
+    // const products: any[] = await firstValueFrom(this.client.send({cmd: 'validate_product'}, orderIds));
 
     return {
       ...order, 

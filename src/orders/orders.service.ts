@@ -7,6 +7,7 @@ import OrderPaginationDto from './dto/order-pagination.dto';
 import { NATS_SERVICE } from 'src/config';
 import { firstValueFrom } from 'rxjs';
 import { OrderWithProducts } from './interfaces/order-with-products.interface';
+import { PaidOrderDto } from './dto';
 
 @Injectable()
 export class OrdersService extends PrismaClient implements OnModuleInit {
@@ -185,5 +186,27 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
       productId: item.productId,
       name: products.find(product => product.id === item.productId)?.name
     }))}
+  }
+
+  async paidOrder(paidOrderDto: PaidOrderDto) {
+    this.logger.log('paidOrderDto', { paidOrderDto });
+    const order = await this.order.update({
+      where: {
+        id: paidOrderDto.orderId
+      },
+      data: {
+        status: OrderStatus.PAID,
+        paid: true,
+        paidAt: new Date(),
+        stripeChargeId: paidOrderDto.stripePaymentId,
+        OrderReceipt: {
+          create: {
+            receiptUrl: paidOrderDto.receiptUrl
+          }
+        }
+      }
+    });
+
+    return order
   }
 }
